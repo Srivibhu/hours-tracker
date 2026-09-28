@@ -1,15 +1,27 @@
 import "server-only";
 import { store } from "./store";
+import { OWNER_ID, userStore } from "./users";
 import { HISTORY_PAYCHECKS, HISTORY_SHIFTS } from "./history";
 import { DEFAULT_SETTINGS, JOB_COLORS, type Paycheck, type Settings, type Shift } from "./types";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-export async function getSettings(): Promise<Settings> {
-  const s = await store().get<Settings>("settings");
-  if (!s) return DEFAULT_SETTINGS;
-  const merged = { ...DEFAULT_SETTINGS, ...s };
+/** The owner keeps the original defaults; everyone else starts with one blank job to fill in. */
+function defaultsFor(uid: string): Settings {
+  if (uid === OWNER_ID) return DEFAULT_SETTINGS;
+  return {
+    ...DEFAULT_SETTINGS,
+    jobs: [{ id: "job1", name: "My job", rate: 15, color: JOB_COLORS[0].light }],
+    weeklyLimit: 0,
+  };
+}
+
+export async function getSettings(uid: string = OWNER_ID): Promise<Settings> {
+  const s = await userStore(uid).get<Settings>("settings");
+  const base = defaultsFor(uid);
+  if (!s) return base;
+  const merged = { ...base, ...s };
   // Older versions stored free-form colors; snap them onto the validated palette.
   merged.jobs = merged.jobs.map((j, i) =>
     JOB_COLORS.some((c) => c.light === j.color) ? j : { ...j, color: JOB_COLORS[i % JOB_COLORS.length].light }
@@ -80,8 +92,9 @@ export function validatePaycheck(input: unknown, id: string): Paycheck | string 
 }
 
 /** Load the bundled calendar history. Stable ids, so running it twice changes nothing. */
-export async function importHistory() {
-  const db = store();
+export async function importHistory(uid: string = OWNER_ID) {
+  if (uid !== OWNER_ID) return { shifts: 0, paychecks: 0 }; // the bundled history is the owner's own data
+  const db = userStore(uid);
   const [shifts, paychecks] = await Promise.all([db.hgetall<Shift>("shifts"), db.hgetall<Paycheck>("paychecks")]);
   const taken = new Set(Object.values(shifts).map((s) => `${s.date}|${s.start}|${s.jobId}`));
   let added = 0;
@@ -100,7 +113,8 @@ export async function importHistory() {
   return { shifts: added, paychecks: addedPay };
 }
 
-export async function ensureSeeded() {
+export async function ensureSeeded(uid: string = OWNER_ID) {
+  if (uid !== OWNER_ID) return;
   if (await store().get<boolean>("seeded")) return;
-  await importHistory();
+  await importHistory(uid);
 }

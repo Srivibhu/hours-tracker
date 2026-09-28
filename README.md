@@ -1,6 +1,6 @@
 # Hours Tracker
 
-A personal work-hours tracker. It shows weekly, biweekly (pay period), and monthly totals, splits hours by job, and estimates pay. Sign-in uses **passkeys** (Touch ID / Face ID), and only a fixed number of devices (default **2**: your laptop and your phone) can ever be registered.
+A personal work-hours tracker. It shows weekly, biweekly (pay period), and monthly totals, splits hours by job, and estimates pay. Sign-in uses **passkeys** (Touch ID / Face ID). Each person has their own private account, and each account is limited to a fixed number of devices (default **2**: laptop and phone).
 
 ## What's inside
 - **Timesheet**: week / pay-period / month view with a jobs × days grid (like a paper timesheet) and a ledger of entries. Tap any entry to edit.
@@ -31,19 +31,24 @@ A personal work-hours tracker. It shows weekly, biweekly (pay period), and month
    |---|---|
    | `SESSION_SECRET` | output of `openssl rand -base64 32` |
    | `SETUP_CODE` | a long passphrase only you know |
-   | `MAX_DEVICES` | *(optional)* defaults to `2` |
+   | `MAX_DEVICES` | *(optional)* passkeys per person, defaults to `2` |
 5. **Redeploy** (Deployments → ⋯ → Redeploy) so the env vars take effect.
 6. **Register your devices** using the **production URL** (e.g. `hours-tracker-sri.vercel.app`), not a preview URL. Passkeys are tied to the exact domain.
    - On your laptop: open the site → enter setup code → Touch ID.
    - On your phone: open the site → "Set up a new device" → setup code → Face ID.
-   - After two devices are registered, registration closes. Nobody else can register, even with the code.
+
+## Accounts and inviting a friend
+- You (the owner) sign up with the setup code. Everyone else joins through an invite link, so a leaked setup code alone can't create accounts for other people.
+- Settings → **People** → enter your friend's name → **Invite a friend**. Send them the link (single use, expires in 7 days). They open it, tap **Create my passkey**, and land in their own empty tracker.
+- Every account has its own jobs, shifts, paychecks and settings. You can't see theirs and they can't see yours. Your existing data is untouched.
+- Settings → People also lets you remove someone. Their passkeys are deleted and they're signed out immediately (their data stays in the database, unreachable).
+- Friends can't invite others; they can only add their own devices.
 
 ## How the device lock works
 - Each device creates a passkey in its own secure hardware (Secure Enclave / TPM). The server stores only the public key.
-- Registration needs the setup code and is refused once `MAX_DEVICES` is reached.
+- Each account is capped at `MAX_DEVICES` passkeys (default 2). Extra devices are added from **Settings → Add another device**, which creates a one-time link for your own account (owners can also still use the setup code).
 - A signed-in device gets a 30-day session cookie. Every request also checks that the device is still registered, so **removing a device in Settings signs it out immediately**.
-- To replace a device (e.g. a new phone), remove the old one in Settings from your other device, then register the new one with the setup code.
-- **Apple note:** if your Mac and iPhone share an Apple ID with iCloud Keychain on, the passkey syncs between them. That still only covers your own Apple devices, and the device count still caps new registrations.
+- **Apple note:** if your Mac and iPhone share an Apple ID with iCloud Keychain on, the passkey syncs between them, so the site sees **one** passkey that works on both. That's expected: you're not locked out of either device, and you only use one of your device slots.
 
 ## Local development
 ```bash

@@ -8,7 +8,7 @@ import path from "path";
  * - Production (Vercel): Upstash Redis via REST.
  * - Local dev without Redis env vars: a JSON file in .data/db.json.
  */
-interface Backend {
+export interface Backend {
   hgetall<T>(key: string): Promise<Record<string, T>>;
   hget<T>(key: string, field: string): Promise<T | null>;
   hset<T>(key: string, field: string, value: T): Promise<void>;
