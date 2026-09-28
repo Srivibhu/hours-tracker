@@ -2,19 +2,21 @@ import "server-only";
 import { headers } from "next/headers";
 import { timingSafeEqual } from "crypto";
 import { store } from "./store";
+import { OWNER_ID } from "./users";
 
 export type StoredCredential = {
   id: string; // base64url credential id
   publicKey: string; // base64url
   counter: number;
   transports?: string[];
+  /** Which account this passkey belongs to. Missing on older records = the original owner. */
+  userId?: string;
   name: string;
   createdAt: number;
   lastUsedAt: number | null;
 };
 
 export const RP_NAME = "Hours Tracker";
-export const USER_NAME = "owner";
 
 export function maxDevices() {
   const n = parseInt(process.env.MAX_DEVICES || "2", 10);
@@ -36,6 +38,10 @@ export async function rp() {
 
 export async function listCredentials(): Promise<StoredCredential[]> {
   return Object.values(await store().hgetall<StoredCredential>("creds"));
+}
+
+export async function credentialsFor(uid: string): Promise<StoredCredential[]> {
+  return (await listCredentials()).filter((c) => (c.userId ?? OWNER_ID) === uid);
 }
 
 export const b64url = {

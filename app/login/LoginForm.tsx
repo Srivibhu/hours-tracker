@@ -32,10 +32,12 @@ function friendly(e: unknown) {
   return err?.message || "Something went wrong.";
 }
 
-export default function LoginForm({ deviceCount, maxDevices }: { deviceCount: number; maxDevices: number }) {
-  const full = deviceCount >= maxDevices;
-  const [mode, setMode] = useState<"signin" | "setup">(deviceCount === 0 ? "setup" : "signin");
+export default function LoginForm({ deviceCount, invite: inviteFromUrl }: { deviceCount: number; invite: string }) {
+  const [mode, setMode] = useState<"signin" | "setup" | "join">(
+    inviteFromUrl ? "join" : deviceCount === 0 ? "setup" : "signin"
+  );
   const [code, setCode] = useState("");
+  const [invite, setInvite] = useState(inviteFromUrl);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -65,7 +67,7 @@ export default function LoginForm({ deviceCount, maxDevices }: { deviceCount: nu
     setBusy(true);
     setError("");
     try {
-      const options = await post("/api/auth/register/options", { code, name });
+      const options = await post("/api/auth/register/options", mode === "join" ? { invite, name } : { code, name });
       const attestation = await startRegistration({ optionsJSON: options });
       await post("/api/auth/register/verify", attestation);
       window.location.href = "/";
@@ -82,9 +84,6 @@ export default function LoginForm({ deviceCount, maxDevices }: { deviceCount: nu
           <div className="wordmark">
             Hours <span>/ timecard</span>
           </div>
-          <span className="label">
-            {deviceCount}/{maxDevices} devices
-          </span>
         </header>
 
         {!supported && <p className="error">This browser doesn&apos;t support passkeys. Use Safari or Chrome.</p>}
@@ -95,15 +94,34 @@ export default function LoginForm({ deviceCount, maxDevices }: { deviceCount: nu
             <button className="btn solid" onClick={signIn} disabled={busy || deviceCount === 0}>
               {busy ? "Waiting for passkey…" : "Sign in with passkey"}
             </button>
-            {!full && (
-              <button className="linkbtn" onClick={() => setMode("setup")}>
-                Set up a new device
-              </button>
-            )}
+            <button className="linkbtn" onClick={() => setMode("join")}>
+              Got an invite? Join
+            </button>
+            <button className="linkbtn" onClick={() => setMode("setup")}>
+              Owner: set up a new device
+            </button>
           </div>
+        ) : mode === "join" ? (
+          <form onSubmit={register} className="stack">
+            <p className="muted">Create your own private account. You&apos;ll only ever see your own hours.</p>
+            <label className="field">
+              <span>Invite code</span>
+              <input value={invite} onChange={(e) => setInvite(e.target.value.trim())} autoComplete="off" required />
+            </label>
+            <label className="field">
+              <span>Device name</span>
+              <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
+            </label>
+            <button className="btn solid" disabled={busy || !invite}>
+              {busy ? "Waiting for Face ID / Touch ID…" : "Create my passkey"}
+            </button>
+            <button type="button" className="linkbtn" onClick={() => setMode("signin")}>
+              Back to sign in
+            </button>
+          </form>
         ) : (
           <form onSubmit={register} className="stack">
-            <p className="muted">Register this device. You&apos;ll need the setup code from your Vercel settings.</p>
+            <p className="muted">Owner only: register this device with the setup code from your Vercel settings.</p>
             <label className="field">
               <span>Setup code</span>
               <input type="password" value={code} onChange={(e) => setCode(e.target.value)} autoComplete="off" required />
@@ -112,10 +130,9 @@ export default function LoginForm({ deviceCount, maxDevices }: { deviceCount: nu
               <span>Device name</span>
               <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
             </label>
-            <button className="btn solid" disabled={busy || full}>
+            <button className="btn solid" disabled={busy}>
               {busy ? "Waiting for Face ID / Touch ID…" : "Register this device"}
             </button>
-            {full && <p className="error">Device limit reached.</p>}
             {deviceCount > 0 && (
               <button type="button" className="linkbtn" onClick={() => setMode("signin")}>
                 Back to sign in

@@ -1,18 +1,15 @@
 import { generateAuthenticationOptions } from "@simplewebauthn/server";
 import { handle, json } from "@/lib/api";
 import { setChallenge } from "@/lib/session";
-import { listCredentials, maxDevices, rp } from "@/lib/webauthn";
+import { rp } from "@/lib/webauthn";
 
 export const dynamic = "force-dynamic";
 
 export const POST = handle(async () => {
-  const creds = await listCredentials();
   const { rpID } = await rp();
-  const options = await generateAuthenticationOptions({
-    rpID,
-    userVerification: "required",
-    allowCredentials: creds.map((c) => ({ id: c.id, transports: c.transports })),
-  });
+  // No allowCredentials: passkeys are discoverable, so the browser offers whichever one this person has
+  // for the site. That way several people can sign in without the server listing anyone's credentials.
+  const options = await generateAuthenticationOptions({ rpID, userVerification: "required" });
   await setChallenge(options.challenge, "auth");
-  return json({ options, deviceCount: creds.length, maxDevices: maxDevices() });
+  return json({ options });
 });

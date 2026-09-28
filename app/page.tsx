@@ -1,19 +1,21 @@
 import { redirect } from "next/navigation";
 import { ensureSeeded, getSettings } from "@/lib/data";
-import { currentDevice } from "@/lib/session";
-import { store } from "@/lib/store";
+import { currentUser } from "@/lib/session";
+import { userStore } from "@/lib/users";
 import type { Paycheck, Shift } from "@/lib/types";
 import Tracker from "./Tracker";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  if (!(await currentDevice())) redirect("/login");
-  await ensureSeeded();
+  const me = await currentUser();
+  if (!me) redirect("/login");
+  await ensureSeeded(me.uid);
+  const db = userStore(me.uid);
   const [settings, shifts, paychecks] = await Promise.all([
-    getSettings(),
-    store().hgetall<Shift>("shifts"),
-    store().hgetall<Paycheck>("paychecks"),
+    getSettings(me.uid),
+    db.hgetall<Shift>("shifts"),
+    db.hgetall<Paycheck>("paychecks"),
   ]);
   return (
     <Tracker

@@ -2,6 +2,7 @@ import "server-only";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { store } from "./store";
+import { OWNER_ID } from "./users";
 import type { StoredCredential } from "./webauthn";
 
 const SESSION_COOKIE = "ht_session";
@@ -37,26 +38,33 @@ export async function clearSession() {
   (await cookies()).delete(SESSION_COOKIE);
 }
 
-/** Returns the credential id of the signed-in device, or null. Also checks the device wasn't revoked. */
-export async function currentDevice(): Promise<string | null> {
+export type SessionUser = { cid: string; uid: string };
+
+/** The signed-in device and the account it belongs to, or null. Also checks the device wasn't revoked. */
+export async function currentUser(): Promise<SessionUser | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secret());
     const cid = payload.cid as string;
     const cred = await store().hget<StoredCredential>("creds", cid);
-    return cred ? cid : null;
+    return cred ? { cid, uid: cred.userId ?? OWNER_ID } : null;
   } catch {
     return null;
   }
 }
 
+/** Returns the credential id of the signed-in device, or null. */
+export async function currentDevice(): Promise<string | null> {
+  return (await currentUser())?.cid ?? null;
+}
+
 export class Unauthorized extends Error {}
 
-export async function requireDevice(): Promise<string> {
-  const cid = await currentDevice();
-  if (!cid) throw new Unauthorized();
-  return cid;
+export async function requireUser(): Promise<SessionUser> {
+  const u = await currentUser();
+  if (!u) throw new Unauthorized();
+  return u;
 }
 
 /** Short-lived signed cookie carrying the WebAuthn challenge between options + verify. */
