@@ -18,18 +18,52 @@ export async function api<T = unknown>(url: string, method = "GET", body?: unkno
   return data as T;
 }
 
+const THEME_KEY = "theme";
+
+function effectiveDark() {
+  const forced = document.documentElement.dataset.theme;
+  return forced ? forced === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+/** True when the page is showing dark colors: the toggle's choice, else the system's. */
 export function useDark() {
   const [dark, setDark] = useState(false);
   useEffect(() => {
+    const sync = () => setDark(effectiveDark());
+    sync();
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    setDark(mq.matches);
-    const on = (e: MediaQueryListEvent) => setDark(e.matches);
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
+    mq.addEventListener("change", sync);
+    const mo = new MutationObserver(sync);
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => {
+      mq.removeEventListener("change", sync);
+      mo.disconnect();
+    };
   }, []);
   return dark;
 }
 
+/** Flips between light and dark and remembers the choice on this device. */
+export function ThemeToggle() {
+  const dark = useDark();
+  function toggle() {
+    const next = dark ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch {}
+  }
+  return (
+    <button
+      className="theme-toggle"
+      onClick={toggle}
+      aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+      title={dark ? "Light mode" : "Dark mode"}
+    >
+      {dark ? "☀" : "☾"}
+    </button>
+  );
+}
 /** Job color stepped for the current surface (light/dark steps of the same palette slot). */
 export function colorFor(job: Job | undefined, dark: boolean) {
   if (!job) return dark ? "#847f72" : "#8a8677";
