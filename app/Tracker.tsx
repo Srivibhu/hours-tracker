@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Job, Paycheck, Settings, Shift } from "@/lib/types";
-import { computeStats } from "@/lib/analytics";
-import { fmt12, fmtHM, money, nowHHMM, shiftMinutes, todayLocal } from "@/lib/time";
-import { api, colorFor, Delta, useDark } from "./ui";
+import { computeStats, fmtWeekday } from "@/lib/analytics";
+import { fmt12, fmtHM, fmtHours, money, nowHHMM, shiftMinutes, todayLocal } from "@/lib/time";
+import { api, colorFor, useDark } from "./ui";
 import ShiftDialog, { type Draft } from "./ShiftDialog";
 import PaycheckDialog, { type PayDraft } from "./PaycheckDialog";
 import Timesheet, { type View } from "./Timesheet";
@@ -148,34 +148,38 @@ export default function Tracker({
   }
 
   const r = stats.ranges;
-  const strip: { view: View; label: string; agg: typeof stats.agg.thisWeek; d: typeof stats.deltas.week; vs: string }[] = [
-    { view: "week", label: "This week", agg: stats.agg.thisWeek, d: stats.deltas.week, vs: "vs last wk" },
-    { view: "period", label: "Pay period", agg: stats.agg.thisPeriod, d: stats.deltas.period, vs: "vs last pd." },
-    { view: "month", label: r.thisMonth.label.split(" ")[0], agg: stats.agg.thisMonth, d: stats.deltas.month, vs: "vs last mo." },
-  ];
+  const week = stats.agg.thisWeek;
+  const limit = settings.weeklyLimit;
+  const weekPct = limit > 0 ? Math.min(100, (week.minutes / 60 / limit) * 100) : 0;
+  const left = limit - week.minutes / 60;
+  const up = stats.upcoming;
+  const goTo = (view: View) => {
+    setTab("sheet");
+    setFocus({ view, nonce: Date.now() });
+  };
 
   return (
     <div className="page">
       <header className="masthead">
-        <div className="wordmark">
-          Hours <span>/ timecard</span>
-        </div>
+        <div className="wordmark">Hours</div>
         <nav className="nav">
-          <button aria-current={tab === "sheet" ? "page" : undefined} onClick={() => setTab("sheet")}>Timesheet</button>
-          <button aria-current={tab === "insights" ? "page" : undefined} onClick={() => setTab("insights")}>Insights</button>
-          <button aria-current={tab === "settings" ? "page" : undefined} onClick={() => setTab("settings")}>Settings</button>
-          <button onClick={signOut}>Sign out</button>
+          <div className="seg">
+            <button aria-current={tab === "sheet" ? "page" : undefined} onClick={() => setTab("sheet")}>Timesheet</button>
+            <button aria-current={tab === "insights" ? "page" : undefined} onClick={() => setTab("insights")}>Insights</button>
+            <button aria-current={tab === "settings" ? "page" : undefined} onClick={() => setTab("settings")}>Settings</button>
+          </div>
+          <button className="signout" onClick={signOut}>Sign out</button>
         </nav>
       </header>
 
-      <div className="clockline">
+      <div className={`card clock ${openShift ? "on" : ""}`}>
         {openShift ? (
           <>
             <div className="status">
               <i className="lamp on" aria-hidden />
               <span>
-                On the clock at <b>{job(openShift.jobId)?.name ?? "Unknown"}</b>
-                <span className="faint"> since {fmt12(openShift.start)}</span>
+                Working at <b>{job(openShift.jobId)?.name ?? "Unknown"}</b>
+                <span className="muted"> since {fmt12(openShift.start)}</span>
               </span>
             </div>
             <span className="elapsed">{fmtHM(shiftMinutes(openShift, now))}</span>
@@ -185,41 +189,58 @@ export default function Tracker({
           <>
             <div className="status">
               <i className="lamp" aria-hidden />
-              <span className="muted">Off the clock</span>
+              <span className="muted">Not clocked in</span>
             </div>
-            <span className="label">Clock in</span>
-            {settings.jobs.map((j) => (
-              <button key={j.id} className="btn" onClick={() => clockIn(j.id)}>
-                <i className="swatch" style={{ background: colorFor(j, dark) }} />
-                {j.name}
-              </button>
-            ))}
+            <div className="jobs">
+              {settings.jobs.map((j) => (
+                <button key={j.id} className="btn" onClick={() => clockIn(j.id)}>
+                  <i className="swatch" style={{ background: colorFor(j, dark) }} />
+                  Clock in · {j.name}
+                </button>
+              ))}
+            </div>
           </>
         )}
       </div>
 
-      <div className="strip">
-        {strip.map((s) => (
-          <button
-            key={s.view}
-            onClick={() => {
-              setTab("sheet");
-              setFocus({ view: s.view, nonce: Date.now() });
-            }}
-          >
-            <span className="label">{s.label}</span>
-            <span className="figure">
-              {Math.round((s.agg.minutes / 60) * 100) / 100}
-              <small>h</small>
-            </span>
-            <span className="small muted mono num">{money(s.agg.pay)}</span>
-            {s.d.pct === null && s.d.hours > 0 ? (
-              <span className="delta faint">nothing logged {s.vs.replace("vs ", "")}</span>
-            ) : (
-              <Delta hours={s.d.hours} pct={s.d.pct} suffix={s.vs} />
-            )}
-          </button>
-        ))}
+      <div className="summary">
+        <button className="card stat" onClick={() => goTo("week")}>
+          <span className="label">This week</span>
+          <span className="figure">
+            {fmtHours(week.minutes)}
+            <small>h</small>
+          </span>
+          {limit > 0 && (
+            <>
+              <div className={`meter ${left < 0 ? "over" : left < 3 ? "warn" : ""}`} aria-hidden>
+                <i style={{ width: `${weekPct}%` }} />
+              </div>
+              <span className={`note ${left < 0 ? "down" : left < 3 ? "warn" : ""}`}>
+                {left < 0 ? `${fmtHours(-left * 60)} h over your ${limit} h limit` : `${fmtHours(left * 60)} h left of ${limit} h`}
+              </span>
+            </>
+          )}
+          <Pace hours={stats.deltas.week.hours} vs="last week" />
+        </button>
+
+        <button className="card stat" onClick={() => goTo("period")}>
+          <span className="label">Pay period · {r.thisPeriod.label}</span>
+          <span className="figure">
+            {fmtHours(stats.agg.thisPeriod.minutes)}
+            <small>h</small>
+          </span>
+          <span className="sub num">{money(stats.agg.thisPeriod.pay)} earned</span>
+          <Pace hours={stats.deltas.period.hours} vs="last period" />
+        </button>
+
+        <button className="card stat pay" onClick={() => setTab("insights")}>
+          <span className="label">Next paycheck · {fmtWeekday(up.date)}</span>
+          <span className="figure">{money(up.estimate)}</span>
+          <span className="sub">
+            {up.final ? "Estimate for" : "Projected for"} {up.range.label}
+          </span>
+          <span className="note">{fmtHours(up.agg.minutes)} h logged{up.final ? "" : " so far"}</span>
+        </button>
       </div>
 
       {tab === "sheet" && (
@@ -280,5 +301,16 @@ export default function Tracker({
       )}
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
+  );
+}
+
+/** Plain-language pace vs the same point in the previous range. Neutral unless the gap is real. */
+function Pace({ hours, vs }: { hours: number; vs: string }) {
+  const abs = Math.round(Math.abs(hours) * 100) / 100;
+  if (abs < 0.01) return <span className="pace">Same pace as {vs}</span>;
+  return (
+    <span className="pace">
+      <b className={hours > 0 ? "up" : ""}>{hours > 0 ? "▲" : "▼"} {abs} h</b> {hours > 0 ? "ahead of" : "behind"} {vs} at this point
+    </span>
   );
 }

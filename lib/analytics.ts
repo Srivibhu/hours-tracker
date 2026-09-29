@@ -46,7 +46,7 @@ export function delta(cur: Agg, prev: Agg): Delta {
 }
 
 export type Tone = "up" | "down" | "flat" | "info" | "warn";
-export type Insight = { id: string; figure: string; tone: Tone; text: string; detail?: string };
+export type Insight = { id: string; title: string; figure: string; tone: Tone; text: string; detail?: string };
 
 const h = (min: number) => `${Math.round((min / 60) * 100) / 100} h`;
 const usd = (n: number) =>
@@ -147,6 +147,7 @@ export function computeStats(shifts: Shift[], paychecks: Paycheck[], settings: S
     const d = delta(a.lastWeek, a.weekBefore);
     out.push({
       id: "wow",
+      title: "Last week",
       figure: d.pct === null ? signedH(d.hours * 60) : signedPct(d.pct),
       tone: toneOf(d.hours),
       text:
@@ -161,6 +162,7 @@ export function computeStats(shifts: Shift[], paychecks: Paycheck[], settings: S
     const d = delta(a.thisWeek, a.lastWeekSoFar);
     out.push({
       id: "week-pace",
+      title: "This week so far",
       figure: signedH(d.hours * 60),
       tone: toneOf(d.hours),
       text: `This week so far: ${h(a.thisWeek.minutes)}. By this point last week you had ${h(a.lastWeekSoFar.minutes)}.`,
@@ -174,6 +176,7 @@ export function computeStats(shifts: Shift[], paychecks: Paycheck[], settings: S
     const lastName = lastMonth.label.split(" ")[0];
     out.push({
       id: "mom",
+      title: `${thisMonth.label.split(" ")[0]} so far`,
       figure: d.pct === null ? h(a.thisMonth.minutes) : signedPct(d.pct),
       tone: d.pct === null ? "info" : toneOf(d.hours),
       text:
@@ -187,8 +190,13 @@ export function computeStats(shifts: Shift[], paychecks: Paycheck[], settings: S
     });
   }
 
+  const upcomingEstimate = upcoming.final
+    ? upcoming.agg.pay
+    : Math.max(upcoming.agg.pay, avg4 > 0 ? projectPeriod(a.thisPeriod.pay, avg4Pay, elapsedPeriod) : 0);
+
   out.push({
     id: "next-check",
+      title: "Next paycheck",
     figure: usd(upcoming.agg.pay),
     tone: "info",
     text: `Next paycheck around ${fmtWeekday(upcoming.date)}, for ${upcoming.range.label}: ${h(upcoming.agg.minutes)} logged${upcoming.final ? "" : " so far"}.`,
@@ -204,6 +212,7 @@ export function computeStats(shifts: Shift[], paychecks: Paycheck[], settings: S
     const diff = latest.diffMin;
     out.push({
       id: "logged-vs-paid",
+      title: "Latest paycheck",
       figure: signedH(diff),
       tone: Math.abs(diff) < 15 ? "flat" : diff > 0 ? "warn" : "down",
       text:
@@ -222,6 +231,7 @@ export function computeStats(shifts: Shift[], paychecks: Paycheck[], settings: S
     const over = completed.filter((w) => w.minutes > limitMin).length;
     out.push({
       id: "limit",
+      title: "Weekly limit",
       figure: `${Math.round((a.thisWeek.minutes / limitMin) * 100)}%`,
       tone: left < 0 ? "down" : left < 180 ? "warn" : "info",
       text:
@@ -237,6 +247,7 @@ export function computeStats(shifts: Shift[], paychecks: Paycheck[], settings: S
     const [topId, topMin] = monthJobs[0];
     out.push({
       id: "split",
+      title: "Where your hours go",
       figure: `${Math.round((topMin / a.thisMonth.minutes) * 100)}%`,
       tone: "info",
       text: `${Math.round((topMin / a.thisMonth.minutes) * 100)}% of this month's hours were at ${jobs.get(topId)?.name ?? "one job"}.`,
@@ -248,6 +259,7 @@ export function computeStats(shifts: Shift[], paychecks: Paycheck[], settings: S
     const busiest = weekday.indexOf(Math.max(...weekday));
     out.push({
       id: "habits",
+      title: "Shift habits",
       figure: h(avgShift),
       tone: "info",
       text: `Your average shift is ${h(avgShift)}. You work the most on ${WEEKDAYS[busiest]}s.`,
@@ -258,6 +270,7 @@ export function computeStats(shifts: Shift[], paychecks: Paycheck[], settings: S
   if (unpaid && unpaid.minutes > 0) {
     out.push({
       id: "unpaid",
+      title: "Not paid yet",
       figure: usd(unpaid.pay),
       tone: "info",
       text: `${h(unpaid.minutes)} logged since your last paid period ended (${fmtShort(lastPaidEnd!)}), about ${usd(unpaid.pay)} still to be paid.`,
@@ -273,6 +286,7 @@ export function computeStats(shifts: Shift[], paychecks: Paycheck[], settings: S
       period: delta(a.thisPeriod, a.lastPeriodSoFar),
       month: delta(a.thisMonth, a.lastMonthSoFar),
     },
+    upcoming: { ...upcoming, estimate: upcomingEstimate },
     weeks,
     avg4,
     weekday,

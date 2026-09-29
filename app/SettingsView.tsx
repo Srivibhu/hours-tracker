@@ -166,7 +166,7 @@ export default function SettingsView({
   }
 
   return (
-    <>
+    <div className="settings">
       <section className="section">
         <div className="section-head">
           <h2>Jobs &amp; rates</h2>
@@ -386,6 +386,6 @@ export default function SettingsView({
           </div>
         </section>
       )}
-    </>
+    </div>
   );
 }

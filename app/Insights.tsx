@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Paycheck, Settings } from "@/lib/types";
-import type { Stats } from "@/lib/analytics";
+import type { Insight, Stats } from "@/lib/analytics";
 import { WEEKDAYS } from "@/lib/analytics";
 import { fmtShort, money } from "@/lib/time";
 import { colorFor, useDark, useWidth } from "./ui";
@@ -37,60 +37,87 @@ export default function Insights({
 }) {
   const totalLogged = stats.weeks.reduce((a, w) => a + w.minutes, 0);
   const activeWeeks = stats.weeks.filter((w) => w.minutes > 0).length;
-  const closedShiftsAvg =
-    stats.insights.find((i) => i.id === "habits")?.figure ?? "—";
+  const closedShiftsAvg = stats.insights.find((i) => i.id === "habits")?.figure ?? "—";
+
+  // Things to act on go first, in a colored box. The rest become small tiles.
+  // Anything already on the summary cards or KPIs (paycheck, week pace, limit, avg shift) is left out here.
+  const isAlert = (i: Insight) => (i.id === "logged-vs-paid" || i.id === "limit") && (i.tone === "warn" || i.tone === "down");
+  const alerts = stats.insights.filter(isAlert);
+  const shownAbove = new Set(["next-check", "week-pace", "limit", "habits"]);
+  const tiles = stats.insights.filter((i) => !isAlert(i) && !shownAbove.has(i.id));
 
   return (
     <>
-      <section className="section">
-        <div className="section-head">
-          <h2>How you&apos;re doing</h2>
-          <span className="label">Updated live</span>
-        </div>
-        <ul className="insights">
-          {stats.insights.map((i) => (
-            <li key={i.id} className="insight">
-              <div className={`fig ${i.tone === "up" ? "up" : i.tone === "down" ? "down" : i.tone === "warn" ? "warn" : ""}`}>
-                {(i.tone === "up" || i.tone === "down") && <span className="arrow">{i.tone === "up" ? "▲" : "▼"}</span>}
-                {i.tone === "warn" && <span className="arrow">!</span>}
-                {i.tone === "up" || i.tone === "down" ? i.figure.replace(/^[+−]/, "") : i.figure}
+      {alerts.length > 0 && (
+        <section className="section">
+          <div className="section-head">
+            <h2>Needs a look</h2>
+          </div>
+          <div className="alerts">
+            {alerts.map((i) => (
+              <div key={i.id} className={`alert ${i.tone}`}>
+                <div className="fig">{i.figure}</div>
+                <div>
+                  <div className="title">{i.title}</div>
+                  <p>{i.text}</p>
+                  {i.detail && <p>{i.detail}</p>}
+                </div>
               </div>
-              <div>
-                <p>{i.text}</p>
-                {i.detail && <p>{i.detail}</p>}
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="section">
         <div className="kpis">
-          <div>
+          <div className="card">
             <span className="label">Avg week (last 4)</span>
             <div className="figure">{H(stats.avg4)}<small>h</small></div>
           </div>
-          <div>
+          <div className="card">
             <span className="label">Avg shift</span>
             <div className="figure">{closedShiftsAvg.replace(" h", "")}<small>h</small></div>
           </div>
-          <div>
+          <div className="card">
             <span className="label">Paid this year</span>
             <div className="figure">{money(stats.ytdGross)}</div>
           </div>
-          <div>
+          <div className="card">
             <span className="label">Logged · {activeWeeks} wks</span>
             <div className="figure">{H(totalLogged)}<small>h</small></div>
           </div>
         </div>
       </section>
 
+      {tiles.length > 0 && (
+        <section className="section">
+          <div className="section-head">
+            <h2>At a glance</h2>
+          </div>
+          <div className="tiles">
+            {tiles.map((i) => (
+              <div key={i.id} className="card tile">
+                <span className="label">{i.title}</span>
+                <div className={`fig ${i.tone === "up" ? "up" : i.tone === "down" ? "down" : i.tone === "warn" ? "warn" : ""}`}>
+                  {(i.tone === "up" || i.tone === "down") && <span className="arrow">{i.tone === "up" ? "▲" : "▼"}</span>}
+                  {i.tone === "up" || i.tone === "down" ? i.figure.replace(/^[+−]/, "") : i.figure}
+                </div>
+                <p>{i.text}</p>
+                {i.detail && <p>{i.detail}</p>}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="section">
         <div className="section-head">
           <h2>Hours per week</h2>
           <span className="label">By job{settings.weeklyLimit ? ` · ${settings.weeklyLimit} h limit` : ""}</span>
         </div>
-        <WeeklyChart stats={stats} settings={settings} />
+        <div className="card">
+          <WeeklyChart stats={stats} settings={settings} />
+        </div>
       </section>
 
       <section className="section">
@@ -98,43 +125,49 @@ export default function Insights({
           <h2>Logged vs paid</h2>
           <button className="linkbtn" onClick={onNewPaycheck}>+ Add paycheck</button>
         </div>
-        {stats.reconciliation.length === 0 ? (
-          <p className="empty">Add a paycheck from HR Direct to compare paid hours with what you logged.</p>
-        ) : (
-          <>
-            <ReconChart stats={stats} />
-            <div className="ledger recon" role="table" aria-label="Paychecks" style={{ marginTop: 14 }}>
-              <div className="ledger-head label" role="row">
-                <span>Paid</span>
-                <span>Period</span>
-                <span>Logged</span>
-                <span>Paid</span>
-                <span>Diff</span>
+        <div className="card">
+          {stats.reconciliation.length === 0 ? (
+            <p className="empty">Add a paycheck from HR Direct to compare paid hours with what you logged.</p>
+          ) : (
+            <>
+              <ReconChart stats={stats} />
+              <div className="recon" role="table" aria-label="Paychecks">
+                <div className="recon-head label" role="row">
+                  <span>Paid</span>
+                  <span>Period</span>
+                  <span>Logged</span>
+                  <span>Paid</span>
+                  <span>Diff</span>
+                </div>
+                {[...stats.reconciliation].reverse().map((r) => {
+                  const d = H(r.diffMin);
+                  const tone = Math.abs(d) < 0.25 ? "ok" : d > 0 ? "warn" : "down";
+                  return (
+                    <button key={r.paycheck.id} className="recon-row" role="row" onClick={() => onEditPaycheck(r.paycheck)} title={r.paycheck.note}>
+                      <span>{fmtShort(r.paycheck.payDate)}</span>
+                      <span>
+                        {fmtShort(r.paycheck.periodStart)} – {fmtShort(r.paycheck.periodEnd)}
+                        <span className="faint gross"> · {money(r.paycheck.gross)}</span>
+                      </span>
+                      <span>{H(r.loggedMin).toFixed(2)}</span>
+                      <span>{r.paycheck.hours.toFixed(2)}</span>
+                      <span>
+                        <span className={`pill ${tone}`}>
+                          {tone === "ok" ? "match" : `${d > 0 ? "+" : "−"}${Math.abs(d).toFixed(2)}`}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
-              {[...stats.reconciliation].reverse().map((r) => {
-                const d = H(r.diffMin);
-                return (
-                  <button key={r.paycheck.id} className="entry" role="row" onClick={() => onEditPaycheck(r.paycheck)} title={r.paycheck.note}>
-                    <span className="when">{fmtShort(r.paycheck.payDate)}</span>
-                    <span className="job">
-                      <b className="mono small">{fmtShort(r.paycheck.periodStart)}–{fmtShort(r.paycheck.periodEnd)}</b>
-                      <em className="hide-sm">{money(r.paycheck.gross)}</em>
-                    </span>
-                    <span className="t">{H(r.loggedMin).toFixed(2)}</span>
-                    <span className="t">{r.paycheck.hours.toFixed(2)}</span>
-                    <span className={`hrs ${Math.abs(d) < 0.25 ? "faint" : d > 0 ? "warn" : "down"}`}>
-                      {d > 0 ? "+" : d < 0 ? "−" : ""}
-                      {Math.abs(d).toFixed(2)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            <p className="section-note">
-              <b>+</b> means payroll paid more hours than you logged here (a shift is probably missing). <b>−</b> means you logged hours
-              that weren&apos;t paid, which is worth checking in HR Direct. Tap a row to edit it.
-            </p>
-          </>
+            </>
+          )}
+        </div>
+        {stats.reconciliation.length > 0 && (
+          <p className="section-note">
+            <b>+</b> payroll paid more than you logged, so a shift is probably missing here. <b>−</b> you logged hours that weren&apos;t
+            paid; check HR Direct. Tap a row to edit.
+          </p>
         )}
       </section>
 
@@ -143,37 +176,13 @@ export default function Insights({
           <h2>When you work</h2>
           <span className="label">All logged hours by weekday</span>
         </div>
-        <WeekdayChart stats={stats} />
-      </section>
-
-      <section className="section">
-        <div className="section-head">
-          <h2>More ideas</h2>
-          <span className="label">Not built yet</span>
+        <div className="card">
+          <WeekdayChart stats={stats} />
         </div>
-        <ul className="insights">
-          {IDEAS.map(([t, d]) => (
-            <li key={t} className="insight">
-              <div className="fig faint">○</div>
-              <div>
-                <p>{t}</p>
-                <p>{d}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
       </section>
     </>
   );
 }
-
-const IDEAS: [string, string][] = [
-  ["Time-of-day heatmap", "Weekday × hour grid showing when your shifts cluster (mornings at Isenberg, midday at the lab)."],
-  ["Calendar sync", "Pull planned shifts from Google Calendar and flag ones you didn't log."],
-  ["Semester view", "Totals per semester and summer, with a comparison against last semester."],
-  ["Goal tracking", "Set a savings or earnings goal and see how many shifts are left to reach it."],
-  ["Tax-year summary", "Gross by year with W-2 numbers, handy for filing."],
-];
 
 /* ---------------- charts ---------------- */
 
@@ -381,8 +390,8 @@ function ReconChart({ stats }: { stats: Stats }) {
             const y0 = m.t + i * rowH + (rowH - (bh * 2 + 2)) / 2;
             return (
               <g key={r.paycheck.id}>
-                <path d={hbarPath(x(0), y0, x(H(r.loggedMin)) - x(0), bh)} fill="var(--ink-3)" />
-                <path d={hbarPath(x(0), y0 + bh + 2, x(H(r.paidMin)) - x(0), bh)} fill="var(--ink)" />
+                <path d={hbarPath(x(0), y0, x(H(r.loggedMin)) - x(0), bh)} fill="var(--bar-soft)" />
+                <path d={hbarPath(x(0), y0 + bh + 2, x(H(r.paidMin)) - x(0), bh)} fill="var(--ink-2)" />
                 <text className="val" x={x(Math.max(H(r.loggedMin), H(r.paidMin))) + 6} y={y0 + bh + 4}>
                   {r.diffMin >= 0 ? "+" : "−"}
                   {Math.abs(H(r.diffMin))}
@@ -420,15 +429,14 @@ function ReconChart({ stats }: { stats: Stats }) {
         />
       )}
       <div className="legend">
-        <span><i className="swatch" style={{ background: "var(--ink-3)" }} /> Logged in this app</span>
-        <span><i className="swatch" style={{ background: "var(--ink)" }} /> Paid on the stub</span>
+        <span><i className="swatch" style={{ background: "var(--bar-soft)" }} /> Logged in this app</span>
+        <span><i className="swatch" style={{ background: "var(--ink-2)" }} /> Paid on the stub</span>
       </div>
     </div>
   );
 }
 
 function WeekdayChart({ stats }: { stats: Stats }) {
-  const dark = useDark();
   const [ref, width] = useWidth<HTMLDivElement>();
   const order = [1, 2, 3, 4, 5, 6, 0];
   const vals = order.map((d) => H(stats.weekday[d]));
@@ -437,7 +445,7 @@ function WeekdayChart({ stats }: { stats: Stats }) {
   const height = m.t + m.b + rowH * 7;
   const iw = Math.max(0, width - m.l - m.r);
   const top = Math.max(1, ...vals);
-  const fill = dark ? "#3987e5" : "#2a78d6";
+  const fill = "var(--ink-3)";
   return (
     <div className="chart" ref={ref}>
       {width > 0 && (
@@ -448,7 +456,7 @@ function WeekdayChart({ stats }: { stats: Stats }) {
             const w = (vals[i] / top) * iw;
             return (
               <g key={d}>
-                <text className="axis" x={m.l - 8} y={y0 + 10} textAnchor="end" style={{ fontFamily: "var(--mono)", fontSize: 10.5, fill: "var(--ink-3)" }}>
+                <text className="axis" x={m.l - 8} y={y0 + 10} textAnchor="end" style={{ fontSize: 11, fill: "var(--ink-3)" }}>
                   {WEEKDAYS[d].slice(0, 3)}
                 </text>
                 <path d={hbarPath(m.l, y0, w, 14)} fill={fill} />
