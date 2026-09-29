@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Job, Paycheck, Settings, Shift } from "@/lib/types";
 import { computeStats, fmtWeekday } from "@/lib/analytics";
 import { fmt12, fmtHM, fmtHours, money, nowHHMM, shiftMinutes, todayLocal } from "@/lib/time";
-import { api, colorFor, useDark } from "./ui";
+import { api, colorFor, ThemeToggle, useDark } from "./ui";
 import ShiftDialog, { type Draft } from "./ShiftDialog";
 import PaycheckDialog, { type PayDraft } from "./PaycheckDialog";
 import Timesheet, { type View } from "./Timesheet";
@@ -168,6 +168,7 @@ export default function Tracker({
             <button aria-current={tab === "insights" ? "page" : undefined} onClick={() => setTab("insights")}>Insights</button>
             <button aria-current={tab === "settings" ? "page" : undefined} onClick={() => setTab("settings")}>Settings</button>
           </div>
+          <ThemeToggle />
           <button className="signout" onClick={signOut}>Sign out</button>
         </nav>
       </header>
