@@ -1,12 +1,13 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Job, Settings, Shift } from "@/lib/types";
 import {
   addDays,
   dow,
   fmt12,
   fmtHours,
+  fmtShort,
   inRange,
   money,
   monthRange,
@@ -112,7 +113,7 @@ export default function Timesheet({
   }
 
   return (
-    <section className="section">
+    <section className="section card">
       <div className="ranger">
         <div className="tabs" role="tablist" aria-label="Range">
           {(["week", "period", "month"] as View[]).map((v) => (
@@ -130,10 +131,18 @@ export default function Timesheet({
             →
           </button>
           {!inRange(today, range) && (
-            <button className="linkbtn" style={{ marginLeft: 8 }} onClick={() => setRange(rangeFor(view, today))}>
+            <button className="linkbtn" style={{ marginLeft: 4 }} onClick={() => setRange(rangeFor(view, today))}>
               Today
             </button>
           )}
+        </div>
+        <div className="toolbar-actions">
+          <button className="linkbtn" onClick={exportCsv} disabled={!inView.length}>
+            Export CSV
+          </button>
+          <button className="btn solid" onClick={() => onNew(inRange(today, range) ? today : range.start)}>
+            + New entry
+          </button>
         </div>
       </div>
 
@@ -142,76 +151,64 @@ export default function Timesheet({
           {fmtHours(total)}
           <small>h</small>
         </span>
-        <span className="mono muted num">{money(pay)}</span>
-        <span className="byjob">
-          {settings.jobs
-            .filter((j) => byJob.get(j.id))
-            .map((j) => (
-              <span key={j.id}>
-                <i className="swatch" style={{ background: colorFor(j, dark) }} />
-                {j.name} <b className="mono num">{fmtHours(byJob.get(j.id)!)}</b>
-              </span>
-            ))}
-        </span>
+        <span className="muted num">{money(pay)}</span>
+        {byJob.size > 1 && (
+          <span className="byjob">
+            {settings.jobs
+              .filter((j) => byJob.get(j.id))
+              .map((j) => (
+                <span key={j.id}>
+                  <i className="swatch" style={{ background: colorFor(j, dark) }} />
+                  {j.name} <b className="num">{fmtHours(byJob.get(j.id)!)} h</b>
+                </span>
+              ))}
+          </span>
+        )}
       </div>
 
       {weeksInView.map((w) => (
-        <WeekGrid key={w.start} week={w} title={view === "period" ? w.label : undefined} shifts={shifts} jobs={settings.jobs} now={now} dark={dark} />
+        <WeekGrid key={w.start} week={w} title={view === "period" ? `${w.label} · ${fmtShort(w.start)} – ${fmtShort(w.end)}` : undefined} shifts={shifts} jobs={settings.jobs} now={now} dark={dark} />
       ))}
 
-      <div className="ledger" role="table" aria-label="Entries">
-        <div className="ledger-head label" role="row">
-          <span>Date</span>
-          <span>Job</span>
-          <span>In</span>
-          <span>Out</span>
-          <span>Break</span>
-          <span>Hours</span>
-        </div>
+      <div className="days" aria-label="Entries">
         {groups.length === 0 && <p className="empty">No entries in this range.</p>}
         {groups.map(({ date, list }) => (
-          <Fragment key={date}>
-            {list.map((s, i) => {
+          <div className="day" key={date}>
+            <div className="day-head">
+              <b>
+                {dayLabel(date)}
+                {date === today && <span className="today-tag">Today</span>}
+              </b>
+              {list.length > 1 && <span>{fmtHours(list.reduce((a, s) => a + mins(s), 0))} h</span>}
+            </div>
+            {list.map((s) => {
               const j = jobs.get(s.jobId);
               return (
-                <button key={s.id} className={`entry ${s.end ? "" : "open"}`} role="row" onClick={() => onEdit(s)}>
-                  <span className="when">{i === 0 ? dayLabel(date) + (date === today ? " ·" : "") : ""}</span>
+                <button key={s.id} className={`entry ${s.end ? "" : "open"}`} onClick={() => onEdit(s)}>
                   <span className="job">
                     <i className="swatch" style={{ background: colorFor(j, dark) }} />
                     <b>{j?.name ?? "Unknown job"}</b>
                     {s.note && <em>{s.note}</em>}
                   </span>
-                  <span className="t">{fmt12(s.start)}</span>
-                  <span className="t">{s.end ? fmt12(s.end) : "now"}</span>
-                  <span className="t brk">{s.breakMin ? `${s.breakMin}m` : "—"}</span>
-                  <span className="hrs">{hrs(mins(s))}</span>
-                  <span className="span-time">
-                    {fmt12(s.start)}–{s.end ? fmt12(s.end) : "now"}
-                    {s.breakMin ? ` −${s.breakMin}m` : ""}
+                  <span className="span">
+                    {fmt12(s.start)} – {s.end ? fmt12(s.end) : "now"}
+                    {s.breakMin ? <small>{s.breakMin}m break</small> : null}
                   </span>
+                  <span className="hrs">{hrs(mins(s))} h</span>
                 </button>
               );
             })}
-          </Fragment>
-        ))}
-        {groups.length > 0 && (
-          <div className="ledger-foot">
-            <span>
-              Total <span className="faint small" style={{ fontWeight: 400 }}>· {inView.length} entries</span>
-            </span>
-            <span className="mono">{hrs(total)}</span>
           </div>
-        )}
+        ))}
       </div>
-
-      <div className="actions">
-        <button className="btn solid" onClick={() => onNew(inRange(today, range) ? today : range.start)}>
-          + New entry
-        </button>
-        <button className="linkbtn" onClick={exportCsv}>
-          Export this range (CSV)
-        </button>
-      </div>
+      {groups.length > 0 && (
+        <div className="days-foot">
+          <span>
+            Total <span className="faint small">· {inView.length} {inView.length === 1 ? "entry" : "entries"}</span>
+          </span>
+          <span className="num">{hrs(total)} h</span>
+        </div>
+      )}
     </section>
   );
 }
@@ -235,11 +232,10 @@ function WeekGrid({
   const cell = (jobId: string | null, d: string) =>
     shifts.filter((s) => s.date === d && (jobId === null || s.jobId === jobId)).reduce((a, s) => a + shiftMinutes(s, now), 0);
   const known = new Set(jobs.map((j) => j.id));
-  const rows: { id: string | null; job?: Job; name: string }[] = [
-    ...jobs.map((j) => ({ id: j.id, job: j, name: j.name })),
-  ];
+  const inWeek = (jobId: string) => days.some((d) => cell(jobId, d) > 0);
+  const rows: { id: string | null; job?: Job; name: string }[] = jobs.filter((j) => inWeek(j.id)).map((j) => ({ id: j.id, job: j, name: j.name }));
   const orphan = shifts.some((s) => inRange(s.date, week) && !known.has(s.jobId));
-  const f = (m: number) => (m ? (m / 60).toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1") : "·");
+  const f = (m: number) => (m ? (m / 60).toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1") : "");
   const totalFor = (jobId: string | null) => days.reduce((a, d) => a + cell(jobId, d), 0);
 
   return (
@@ -255,10 +251,11 @@ function WeekGrid({
             <th scope="col">Job</th>
             {days.map((d) => (
               <th key={d} scope="col" className={d === now.date ? "today" : ""}>
-                {DOW[dow(d)].slice(0, 2).toUpperCase()} {Number(d.slice(8))}
+                {DOW[dow(d)]}
+                <small>{Number(d.slice(8))}</small>
               </th>
             ))}
-            <th scope="col" className="total">TOTAL</th>
+            <th scope="col" className="total">Total</th>
           </tr>
         </thead>
         <tbody>
@@ -273,7 +270,7 @@ function WeekGrid({
                 {days.map((d) => {
                   const m = cell(r.id, d);
                   return (
-                    <td key={d} className={`${m ? "" : "zero"} ${d === now.date ? "today" : ""}`}>
+                    <td key={d} className={d === now.date ? "today" : ""}>
                       {f(m)}
                     </td>
                   );
@@ -282,6 +279,11 @@ function WeekGrid({
               </tr>
             );
           })}
+          {rows.length === 0 && !orphan && (
+            <tr className="empty-row">
+              <td colSpan={9}>No hours this week</td>
+            </tr>
+          )}
           {orphan && (
             <tr>
               <th scope="row">Other</th>
@@ -293,15 +295,17 @@ function WeekGrid({
             </tr>
           )}
         </tbody>
+        {rows.length + (orphan ? 1 : 0) > 1 && (
         <tfoot>
           <tr>
-            <th scope="row">Day total</th>
+            <th scope="row">All jobs</th>
             {days.map((d) => (
               <td key={d} className={d === now.date ? "today" : ""}>{f(cell(null, d))}</td>
             ))}
             <td className="total">{f(totalFor(null))}</td>
           </tr>
         </tfoot>
+        )}
       </table>
     </div>
   );
