@@ -13,12 +13,12 @@ const niceMax = (v: number, step: number) => Math.max(step, Math.ceil(v / step) 
 /** Bar path with a 4px rounded data-end and a square baseline. */
 function barPath(x: number, y: number, w: number, h: number, round: boolean) {
   if (h <= 0) return "";
-  const r = round ? Math.min(4, w / 2, h) : 0;
+  const r = 0;
   return `M${x},${y + h}V${y + r}${r ? `Q${x},${y} ${x + r},${y}` : ""}H${x + w - r}${r ? `Q${x + w},${y} ${x + w},${y + r}` : ""}V${y + h}Z`;
 }
 function hbarPath(x: number, y: number, w: number, h: number) {
   if (w <= 0) return "";
-  const r = Math.min(4, h / 2, w);
+  const r = 0;
   return `M${x},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h - r}Q${x + w},${y + h} ${x + w - r},${y + h}H${x}Z`;
 }
 
