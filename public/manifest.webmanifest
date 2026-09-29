@@ -3,7 +3,7 @@
   "short_name": "Hours",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f6f3ec",
+  "background_color": "#efe6d8",
   "theme_color": "#1c1b18",
   "icons": [
     { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" },
