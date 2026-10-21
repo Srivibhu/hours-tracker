@@ -2,7 +2,7 @@ import type { Paycheck, Shift } from "./types";
 
 /**
  * Starter history, pulled from Sri's Google Calendar (Isenberg TSS + Digital Evidence Lab
- * events, Sep 3 – Sep 26 2026) and the 9/25/2026 UMass pay advice.
+ * events, Sep 3 – Sep 26 2026) and the 9/25/2026 and 10/9/2026 UMass pay advices.
  * Imported once automatically on first load; re-importing is safe (ids are stable).
  * Fri 9/25 Isenberg shift is intentionally left out (not worked).
  */
@@ -50,5 +50,15 @@ export const HISTORY_PAYCHECKS: Paycheck[] = [
     gross: 306.24,
     net: 306.24,
     note: "Isenberg 14.64 h (1.5 + 6.82 + 6.32) · Lab 4.5 h",
+  },
+  {
+    id: "pay-2026-10-09",
+    payDate: "2026-10-09",
+    periodStart: "2026-09-20",
+    periodEnd: "2026-10-03",
+    hours: 25.61,
+    gross: 409.76,
+    net: 409.76,
+    note: "10/9 stub: 25.61 h at $16.00, no withholding. YTD 64.75 h, $1,016.00.",
   },
 ];

@@ -104,8 +104,10 @@ export async function importHistory(uid: string = OWNER_ID) {
     added++;
   }
   let addedPay = 0;
+  // Skip a stub whose pay period is already logged (e.g. typed into the Timesheet's paid box), not just by id.
+  const loggedPeriods = new Set(Object.values(paychecks).map((p) => p.periodStart));
   for (const p of HISTORY_PAYCHECKS) {
-    if (paychecks[p.id]) continue;
+    if (paychecks[p.id] || loggedPeriods.has(p.periodStart)) continue;
     await db.hset("paychecks", p.id, p);
     addedPay++;
   }

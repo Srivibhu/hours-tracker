@@ -272,7 +272,7 @@ export default function SettingsView({
         </div>
         <p className="section-note">
           {isOwner &&
-            "Calendar history covers Sep 3–24 (Isenberg TSS and Digital Evidence Lab) plus your 9/11 and 9/25 paychecks. Duplicates are skipped. "}
+            "Calendar history covers Sep 3–24 (Isenberg TSS and Digital Evidence Lab) plus your 9/11, 9/25 and 10/9 paychecks. Duplicates are skipped. "}
           CSV uses the same columns as Export.
         </p>
       </section>

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Job, Settings, Shift } from "@/lib/types";
+import type { Job, Paycheck, Settings, Shift } from "@/lib/types";
+import { fmtWeekday, rateForPeriod } from "@/lib/analytics";
 import {
   addDays,
   dow,
@@ -27,20 +28,36 @@ const dayLabel = (d: string) =>
   `${DOW[dow(d)]} ${new Date(toDay(d)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}`;
 const hrs = (min: number) => (min / 60).toFixed(2);
 
+/** What the paid box hands back when saved: everything needed to log the paycheck for one pay period. */
+export type PaidEntry = {
+  existing?: Paycheck;
+  periodStart: string;
+  periodEnd: string;
+  payDate: string;
+  amount: number;
+  hours: number;
+};
+
 export default function Timesheet({
   shifts,
+  paychecks,
   settings,
   now,
   focus,
   onEdit,
   onNew,
+  onSavePaid,
+  onRemovePaid,
 }: {
   shifts: Shift[];
+  paychecks: Paycheck[];
   settings: Settings;
   now: { date: string; time: string };
   focus: { view: View; nonce: number } | null;
   onEdit: (s: Shift) => void;
   onNew: (date: string) => void;
+  onSavePaid: (e: PaidEntry) => Promise<boolean>;
+  onRemovePaid: (id: string) => void;
   onImported?: () => void;
   setToast?: (s: string) => void;
 }) {
@@ -166,6 +183,19 @@ export default function Timesheet({
         )}
       </div>
 
+      {view === "period" && (
+        <PaidBox
+          range={range}
+          loggedMin={total}
+          loggedPay={pay}
+          settings={settings}
+          paychecks={paychecks}
+          today={today}
+          onSave={onSavePaid}
+          onRemove={onRemovePaid}
+        />
+      )}
+
       {weeksInView.map((w) => (
         <WeekGrid key={w.start} week={w} title={view === "period" ? `${w.label} · ${fmtShort(w.start)} – ${fmtShort(w.end)}` : undefined} shifts={shifts} jobs={settings.jobs} now={now} dark={dark} />
       ))}
@@ -210,6 +240,139 @@ export default function Timesheet({
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * "What you were paid" for the selected pay period. Saving logs it as that period's paycheck, and the
+ * comparison against logged hours and earnings updates as you type.
+ */
+function PaidBox({
+  range,
+  loggedMin,
+  loggedPay,
+  settings,
+  paychecks,
+  today,
+  onSave,
+  onRemove,
+}: {
+  range: Range;
+  loggedMin: number;
+  loggedPay: number;
+  settings: Settings;
+  paychecks: Paycheck[];
+  today: string;
+  onSave: (e: PaidEntry) => Promise<boolean>;
+  onRemove: (id: string) => void;
+}) {
+  const existing = paychecks.find((p) => p.periodStart === range.start);
+  const payDate = existing?.payDate ?? addDays(range.end, settings.payLagDays);
+  const open = range.end >= today; // still running, so nothing to have been paid yet
+  const [text, setText] = useState(existing ? existing.gross.toFixed(2) : "");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    setText(existing ? existing.gross.toFixed(2) : "");
+  }, [range.start, existing?.id, existing?.gross]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const amount = text.trim() === "" ? null : Math.round(Number(text) * 100) / 100;
+  const valid = amount !== null && Number.isFinite(amount) && amount >= 0;
+  const rate = rateForPeriod(settings, loggedPay, loggedMin);
+  // A saved stub's own hours win while the amount is unchanged; otherwise derive hours from the amount.
+  const paidHours = !valid
+    ? null
+    : existing && amount === existing.gross
+      ? existing.hours
+      : rate > 0
+        ? Math.round((amount / rate) * 100) / 100
+        : 0;
+  const dirty = valid && (!existing || amount !== existing.gross);
+
+  const loggedH = loggedMin / 60;
+  const diffH = paidHours === null ? 0 : paidHours - loggedH;
+  const diffAmt = valid ? Math.round((amount - loggedPay) * 100) / 100 : 0;
+  const tone = Math.abs(diffH) < 0.25 ? "ok" : diffH > 0 ? "warn" : "down";
+  const signedH = (n: number) => `${n >= 0 ? "+" : "−"}${Math.abs(n).toFixed(2)} h`;
+  const signedMoney = (n: number) => `${n >= 0 ? "+" : "−"}${money(Math.abs(n))}`;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!valid || !dirty || paidHours === null) return;
+    setSaving(true);
+    await onSave({ existing, periodStart: range.start, periodEnd: range.end, payDate, amount, hours: paidHours });
+    setSaving(false);
+  }
+
+  return (
+    <div className="paid-box">
+      <div className="paid-head">
+        <span className="label">
+          Paid for {range.label} · payday {fmtWeekday(payDate)}
+        </span>
+        {existing && <span className="pill ok">Logged</span>}
+      </div>
+      <form className="paid-form" onSubmit={submit}>
+        <label className="paid-input">
+          <span aria-hidden>$</span>
+          <input
+            type="number"
+            step="0.01"
+            min={0}
+            inputMode="decimal"
+            placeholder={open ? "Available once the period ends" : "Amount you were paid"}
+            aria-label={`Amount paid for ${range.label}`}
+            value={text}
+            disabled={open}
+            onChange={(e) => setText(e.target.value)}
+          />
+        </label>
+        <button className="btn solid" disabled={!dirty || saving || open}>
+          {saving ? "Saving…" : existing ? "Update" : "Log paid"}
+        </button>
+        {existing && (
+          <button type="button" className="linkbtn" onClick={() => onRemove(existing.id)}>
+            Remove
+          </button>
+        )}
+      </form>
+
+      {valid && paidHours !== null && (
+        <>
+          <div className="paid-cmp" role="table" aria-label="Logged versus paid">
+            <div className="paid-cmp-head label" role="row">
+              <span />
+              <span>Hours</span>
+              <span>Amount</span>
+            </div>
+            <div role="row">
+              <span>Logged</span>
+              <span>{loggedH.toFixed(2)}</span>
+              <span>{money(loggedPay)}</span>
+            </div>
+            <div role="row">
+              <span>Paid{dirty ? " (unsaved)" : ""}</span>
+              <span>{paidHours.toFixed(2)}</span>
+              <span>{money(amount)}</span>
+            </div>
+            <div role="row" className="paid-diff">
+              <span>Difference</span>
+              <span>
+                <span className={`pill ${tone}`}>{tone === "ok" ? "match" : signedH(diffH)}</span>
+              </span>
+              <span>{Math.abs(diffAmt) < 0.005 ? "$0.00" : signedMoney(diffAmt)}</span>
+            </div>
+          </div>
+          <p className="small muted">
+            {tone === "ok"
+              ? "Paid matches what you logged."
+              : tone === "warn"
+                ? "Payroll paid more than you logged, so a shift is probably missing from this period."
+                : "You logged more than you were paid. Check HR Direct."}
+            {rate > 0 && !(existing && amount === existing.gross) && ` Hours are the amount ÷ $${rate.toFixed(2)}/h.`}
+          </p>
+        </>
+      )}
+    </div>
   );
 }
 

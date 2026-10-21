@@ -124,6 +124,9 @@ export function computeStats(shifts: Shift[], paychecks: Paycheck[], settings: S
       paidMin: p.hours * 60,
       diffMin: p.hours * 60 - logged.minutes, // + = paid more than logged
       diffPay: ((p.hours * 60 - logged.minutes) / 60) * rate,
+      loggedPay: logged.pay,
+      paidPay: p.gross,
+      diffAmt: Math.round((p.gross - logged.pay) * 100) / 100, // + = paid more than the logged hours are worth
     };
   });
   const year = today.slice(0, 4);
@@ -221,7 +224,7 @@ export function computeStats(shifts: Shift[], paychecks: Paycheck[], settings: S
           : diff > 0
             ? `Your ${fmtShort(latest.paycheck.payDate)} paycheck paid ${h(diff)} more than you logged (${h(latest.paidMin)} paid vs ${h(latest.loggedMin)} logged). Some shifts may be missing here.`
             : `Your ${fmtShort(latest.paycheck.payDate)} paycheck paid ${h(-diff)} less than you logged (${h(latest.paidMin)} paid vs ${h(latest.loggedMin)} logged). Check your timesheet.`,
-      detail: Math.abs(diff) >= 15 ? `That's about ${usd(Math.abs(latest.diffPay))}.` : undefined,
+      detail: `${usd(latest.paidPay)} paid vs ${usd(latest.loggedPay)} logged (${signedUsd(latest.diffAmt)}).`,
     });
   }
 
@@ -294,6 +297,17 @@ export function computeStats(shifts: Shift[], paychecks: Paycheck[], settings: S
     ytdGross,
     insights: out,
   };
+}
+
+/**
+ * Hourly rate used to turn a paid amount into paid hours: the shared job rate when every job
+ * pays the same, otherwise the period's logged average, otherwise the first job's rate.
+ */
+export function rateForPeriod(settings: Settings, loggedPay: number, loggedMin: number): number {
+  const rates = [...new Set(settings.jobs.map((j) => j.rate).filter((r) => r > 0))];
+  if (rates.length === 1) return rates[0];
+  if (loggedMin > 0 && loggedPay > 0) return loggedPay / (loggedMin / 60);
+  return rates[0] ?? 0;
 }
 
 function projectPeriod(payNow: number, avgWeekPay: number, elapsedDays: number) {

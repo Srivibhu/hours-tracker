@@ -7,7 +7,7 @@ import { fmt12, fmtHM, fmtHours, money, nowHHMM, shiftMinutes, todayLocal } from
 import { api, colorFor, ThemeToggle, useDark } from "./ui";
 import ShiftDialog, { type Draft } from "./ShiftDialog";
 import PaycheckDialog, { type PayDraft } from "./PaycheckDialog";
-import Timesheet, { type View } from "./Timesheet";
+import Timesheet, { type PaidEntry, type View } from "./Timesheet";
 import Insights from "./Insights";
 import SettingsView from "./SettingsView";
 
@@ -121,6 +121,20 @@ export default function Tracker({
       return false;
     }
   }
+
+  /** Log (or update) the paycheck for one pay period from the Timesheet's paid box. */
+  const savePaid = (e: PaidEntry) =>
+    savePaycheck({
+      id: e.existing?.id,
+      payDate: e.payDate,
+      periodStart: e.periodStart,
+      periodEnd: e.periodEnd,
+      hours: e.hours,
+      gross: e.amount,
+      // No withholding on student pay, so net = gross; keep a net that was entered separately.
+      net: e.existing && e.existing.net !== e.existing.gross ? e.existing.net : e.amount,
+      note: e.existing?.note ?? "Entered from the Timesheet",
+    });
 
   async function deletePaycheck(id: string) {
     if (!confirm("Delete this paycheck?")) return;
@@ -247,11 +261,14 @@ export default function Tracker({
       {tab === "sheet" && (
         <Timesheet
           shifts={shifts}
+          paychecks={paychecks}
           settings={settings}
           now={now}
           focus={focus}
           onEdit={(s) => setDraft({ ...s })}
           onNew={newEntry}
+          onSavePaid={savePaid}
+          onRemovePaid={deletePaycheck}
           onImported={refresh}
           setToast={setToast}
         />
