@@ -247,6 +247,22 @@ button.stat:hover { border-color: var(--rule-2); }
 .byjob { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
 .byjob span { display: inline-flex; align-items: center; gap: 6px; }
 .byjob b { color: var(--ink); font-weight: 600; }
+.paid-box { margin: 10px 16px 6px; padding: 12px 14px; border: 1px solid var(--rule); background: var(--surface-2); display: grid; gap: 10px; }
+.paid-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.paid-form { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.paid-input { position: relative; flex: 1 1 180px; max-width: 260px; display: block; }
+.paid-input > span { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
+.paid-input input { padding-left: 24px; }
+.paid-input input:disabled { opacity: 0.6; }
+.paid-cmp { display: grid; font-size: 14px; font-variant-numeric: tabular-nums; }
+.paid-cmp > div { display: grid; grid-template-columns: minmax(0, 1fr) 90px 100px; gap: 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--rule); }
+.paid-cmp > div:last-child { border-bottom: 0; }
+.paid-cmp > div > span:nth-child(n+2) { text-align: right; }
+.paid-diff { font-weight: 600; }
+@media (max-width: 560px) {
+  .paid-box { margin: 10px 12px 6px; }
+  .paid-cmp > div { grid-template-columns: minmax(0, 1fr) 76px 84px; gap: 6px; }
+}
 .toolbar-actions { display: flex; align-items: center; gap: 14px; margin-left: auto; }
 
 /* timesheet grid (jobs x days) ------------------------------------- */
